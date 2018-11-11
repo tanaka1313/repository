@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xmlns:sec="http://www.springframework.org/schema/security"
+       xsi:schemaLocation="
+           http://www.springframework.org/schema/beans
+           http://www.springframework.org/schema/beans/spring-beans.xsd
+           http://www.springframework.org/schema/security
+           http://www.springframework.org/schema/security/spring-security.xsd
+       ">
+       
+       <!-- データソースの設定 -->
+       <!-- テスト環境用 -->
+       <bean id="dataSource"
+            class="org.springframework.jdbc.datasource.DriverManagerDataSource">
+            <!-- JDBCドライバ -->
+            <property name="driverClassName">
+                <value>com.mysql.jdbc.Driver</value>
+            </property>
+            <!-- JDBC接続文字列 -->
+            <property name="url">
+                <value>jdbc:mysql://trmbsdt.cmx9sdtx9c0k.ap-northeast-1.rds.amazonaws.com:3306/trmbsdt</value>
+            </property>
+            <property name="connectionProperties">
+                <value>useSSL=false</value>
+            </property>
+            <!-- MySQLユーザーID -->
+            <property name="username">
+                <value>root</value>
+            </property>
+            <!-- MySQLパスワード -->
+            <property name="password">
+                <value>trmonline</value>
+            </property>
+        </bean>
+        
+        <bean id="properDataDao" class="example.app.dao.impl.ProperDataDaoImpl">
+            <property name="dataSource" ref="dataSource"></property>
+        </bean>
+
+        <bean id="skillDataDao" class="example.app.dao.impl.SkillDataDaoImpl">
+            <property name="dataSource" ref="dataSource"></property>
+        </bean>
+
+        <bean id="seirenDataDao" class="example.app.dao.impl.SeirenDataDaoImpl">
+            <property name="dataSource" ref="dataSource"></property>
+        </bean>
+        
+        <bean id="seirenSeigenDao" class="example.app.dao.impl.SeirenSeigenDaoImpl">
+            <property name="dataSource" ref="dataSource"></property>
+        </bean>
+        
+        <bean id="skillLogDao" class="example.app.dao.impl.SkillLogDaoImpl">
+            <property name="dataSource" ref="dataSource"></property>
+        </bean>
+        
+        <bean id="skillLogCalcDao" class="example.app.dao.impl.SkillLogCalcDaoImpl">
+            <property name="dataSource" ref="dataSource"></property>
+        </bean>
+        
+        <sec:http pattern="/css/**" security="none" />
+        <sec:http pattern="/js/**" security="none" />
+        <sec:http pattern="/images/**" security="none" />
+        <sec:http pattern="/layout/**" security="none" />
+        <sec:http pattern="/" security="none" />
+        <sec:http pattern="/index" security="none" />
+        <sec:http pattern="/BukiProper" security="none" />
+        <sec:http pattern="/BouguProper" security="none" />
+        <sec:http pattern="/ProperSimulator" security="none" />
+        <sec:http pattern="/Skill" security="none" />
+        <sec:http pattern="/SkillCode" security="none" />
+        <sec:http pattern="/ProperLogic" security="none" />
+        <sec:http pattern="/Seiren" security="none" />
+        <sec:http pattern="/SeirenLogic" security="none" />
+        
+    <sec:http>
+        <sec:form-login login-page="/login" />
+        <sec:intercept-url pattern="/login" access="permitAll" />
+        <sec:intercept-url pattern="/**" access="isAuthenticated()" />
+        <sec:form-login />
+    </sec:http>
+    
+    <!-- ユーザとROLEを定義 -->
+    <sec:authentication-manager>
+        <sec:authentication-provider>
+            <sec:user-service>
+                <sec:user name="tanaka1313" password="tanaka1313" authorities="ROLE_ADMIN" />
+                <sec:user name="toramuser" password="toramuser" authorities="ROLE_USER" />
+                <sec:user name="testuser" password="testuser" authorities="ROLE_USER" />
+            </sec:user-service>
+        </sec:authentication-provider>
+    </sec:authentication-manager>
+    
+</beans>

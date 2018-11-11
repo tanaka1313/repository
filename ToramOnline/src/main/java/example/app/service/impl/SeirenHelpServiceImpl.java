@@ -1,0 +1,498 @@
+package example.app.service.impl;
+
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+
+import example.app.dao.SeirenDataDao;
+import example.app.dao.SeirenSeigenDao;
+import example.app.dto.HojoItemDataDto;
+import example.app.dto.KousekiDataDto;
+import example.app.dto.SeirenItemDto;
+import example.app.dto.SeirenRekkaDto;
+import example.app.dto.SeirenTankaDto;
+import example.app.form.SeirenInputForm;
+import example.app.form.SeirenOutputForm;
+import example.app.service.SeirenHelpService;
+
+@Service
+public class SeirenHelpServiceImpl implements SeirenHelpService{
+
+	private String[] hyoujiSeiren = {"0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "E", "D", "C", "B", "A", "S"};
+
+	@Autowired
+	SeirenDataDao seirenDataDao;
+	
+	@Override
+	public SeirenOutputForm getSeirenAve(SeirenInputForm seirenInputForm) {
+		
+		// 単価情報MAP
+		Map<Integer,Integer> tankaMap = new HashMap();
+		// 期待値設定MAPの取得
+		Map<String,List<Double>> useMap = new HashMap();
+		// 使用アイテムリスト
+		List<String> itemList = new ArrayList();
+		// 0からSに必要な期待値スピナ
+		double sum0toS = 0;
+		// 表示用アイテムリスト
+		List<List<String>> hyoujiList = new ArrayList();
+		// 横表示可能数
+		int yoko = 4;
+		// 表示用精錬値
+		List<String> seirenStrList = new ArrayList();
+		// 表示用成功率
+		List<Integer> seikouRateList = new ArrayList();
+		// アイテム情報取得
+		List<SeirenItemDto> itemDtoList = seirenInputForm.getSeirenItems();
+		// カスタマイズ精錬値
+		String seirenStr;
+		// カスタマイズ部分のMap
+		Map<String,Double> customUseMap = new HashMap();
+		// 表示用初期精錬
+		String syokiSeirenHyoji;
+		String mokuhyoSeirenHyoji;
+		
+		// input情報の整理
+		this.setInputData(seirenInputForm);
+		// 単価情報の取得
+		this.setTankaMap(seirenInputForm, tankaMap);
+		// 使用アイテムリストの設定
+		this.setItemList(itemDtoList, itemList);
+		
+		// 期待値設定MAPの初期化
+		for(String s : itemList) {
+			List<Double> temp = new ArrayList();
+			useMap.put(s, temp);
+		}
+		
+		// 期待値の設定
+		int nowLv = 0;
+		for(SeirenItemDto dto : seirenInputForm.getSeirenItems()) {
+			// メイン鉱石、メイン補助アイテムの取得
+			String kouseki = dto.getvUseKouseki();
+			String hojoitem = dto.getvUseHojoItem();
+			// すべてのアイテムリストについて、期待値を計算
+			for(String s : itemList) {
+				List<Double> kitaitiList = useMap.get(s);
+				// メインアイテムかどうかの判断
+				int useItemNum = 0;
+				if(s.equals(kouseki) || s.equals(hojoitem)) {
+					useItemNum = 1;
+				}
+				// 鉱石の期待値の計算
+				Double rekka1Kitaiti = (double)0;
+				Double rekka2Kitaiti = (double)0;
+				Double rekka3Kitaiti = (double)0;
+				if(nowLv >= 1) {
+					rekka1Kitaiti = kitaitiList.get(nowLv - 1);
+				}
+				if(nowLv >= 2) {
+					rekka2Kitaiti = kitaitiList.get(nowLv - 2);
+				}
+				if(nowLv >= 3) {
+					rekka3Kitaiti = kitaitiList.get(nowLv - 3);
+				}
+				Double kitaiti = ( useItemNum 
+						+ rekka1Kitaiti * (dto.getRekka1Rate() + dto.getRekka2Rate() + dto.getRekka3Rate())
+						+ rekka2Kitaiti * (dto.getRekka2Rate() + dto.getRekka3Rate())
+						+ rekka3Kitaiti * (dto.getRekka3Rate())
+						) / dto.getSeikouRate();
+				kitaitiList.add(kitaiti);
+			}
+			nowLv++;
+		}
+		
+		// スピナの計算
+		useMap.put("スピナ", new ArrayList());
+		for(int i=0; i<15; i++) {
+			double sumSpina = 0;
+			for(String s: itemList) {
+				List<Double> kitaitiList = useMap.get(s);
+				Integer money = tankaMap.get(s.hashCode());
+				money = (money == null ? 0 : money);
+				sumSpina += kitaitiList.get(i) * money;
+			}
+			useMap.get("スピナ").add(sumSpina);
+		}
+		
+		// 試行回数の計算
+		// 鉱石リスト
+		List<String> kousekiList = new ArrayList();
+		// 鉱石の情報取得
+		for(SeirenItemDto dto : itemDtoList) {
+			if(!kousekiList.contains(dto.getvUseKouseki())) {
+				kousekiList.add(dto.getvUseKouseki());
+			}
+		}
+		
+		useMap.put("試行回数", new ArrayList());
+		for(int i=0; i<15; i++) {
+			double sumTry = 0;
+			for(String s: kousekiList) {
+				List<Double> kitaitiList = useMap.get(s);
+				sumTry += kitaitiList.get(i);
+			}
+			useMap.get("試行回数").add(sumTry);
+		}
+
+
+		// 表示用リストの作成
+		hyoujiList.add(new ArrayList());
+		hyoujiList.get(0).add("スピナ");
+		hyoujiList.get(0).add("試行回数");
+		int num = 2;
+		for(String s : itemList) {
+			int index = num / yoko;
+			if(num % yoko == 0) {
+				hyoujiList.add(new ArrayList());
+			}
+			hyoujiList.get(index).add(s);
+			num++;
+		}
+		
+		// 成功率、精錬値の取得
+		for(SeirenItemDto dto : seirenInputForm.getSeirenItems()) {
+			seirenStrList.add(dto.getvHyoujiData());
+			seikouRateList.add((int)(dto.getSeikouRate() * 100));
+		}
+		
+		// カスタマイズ部分の精錬表示用
+		int syokiSeiren = seirenInputForm.getSyokiSeiren();
+		int mokuhyoSeiren = seirenInputForm.getMokuhyoSeiren();
+		syokiSeirenHyoji = hyoujiSeiren[syokiSeiren];
+		mokuhyoSeirenHyoji = hyoujiSeiren[mokuhyoSeiren];
+		// カスタマイズ部分の設定
+		seirenStr = syokiSeirenHyoji + "→" + mokuhyoSeirenHyoji;
+		// カスタマイズ部分の総数
+		for(String str : useMap.keySet()){
+			List<Double> strList = useMap.get(str);
+			int index = 0;
+			double sumTemp = (double)0;
+			for(Double d : strList) {
+				if(syokiSeiren <= index && index < mokuhyoSeiren) {
+					sumTemp += d;
+				}
+				index++;
+			}
+			customUseMap.put(str, sumTemp);
+		}
+		
+		// 総スピナの計算
+		sum0toS = customUseMap.get("スピナ");
+		
+		// 出力DTOの作成
+		SeirenOutputForm seirenOutputForm = new SeirenOutputForm();
+		
+		seirenOutputForm.setKitaitiSpina0toS(sum0toS);
+		seirenOutputForm.setHyoujiDataList(seirenStrList);
+		seirenOutputForm.setHyoujiItemList(hyoujiList);
+		seirenOutputForm.setSeikouRateList(seikouRateList);
+		seirenOutputForm.setKitaitiMap(useMap);
+		
+		seirenOutputForm.setSyokiSeirenHyoji(syokiSeirenHyoji);
+		seirenOutputForm.setMokuhyoSeirenHyoji(mokuhyoSeirenHyoji);
+		seirenOutputForm.setSeirenStr(seirenStr);
+		seirenOutputForm.setCustomUseMap(customUseMap);
+
+		return seirenOutputForm;
+	}
+	
+	@Override
+	public SeirenOutputForm getSeirenSimu(SeirenInputForm seirenInputForm, SeirenOutputForm seirenOutputForm) {
+		
+		// 単価情報MAP
+		Map<Integer,Integer> tankaMap = new HashMap();
+		// 使用アイテムリスト
+		List<String> itemList = new ArrayList();
+		// アイテム情報取得
+		List<SeirenItemDto> itemDtoList = seirenInputForm.getSeirenItems();
+		
+		// input情報の整理
+		this.setInputData(seirenInputForm);
+		// 単価情報の取得
+		this.setTankaMap(seirenInputForm, tankaMap);
+		
+		// 試行回数
+		int doNum = 10;
+		// 消費スピナのリスト
+		List<Integer> spnList = new ArrayList();
+		// 期待値
+		double average = 0;
+		// 分散
+		double dispersion = 0;
+		// 標準偏差
+		double standardDev = 0;
+		// 表示用初期精錬
+		String syokiSeirenHyoji;
+		String mokuhyoSeirenHyoji;
+		
+		
+		// 試行回数分実施
+		for(int i = 0; i < doNum; i++) {
+			// 現在レベル
+			int nowLv = seirenInputForm.getSyokiSeiren();
+			// 消費スピナ
+			int spina = 0;
+			// 計算
+			while(nowLv < seirenInputForm.getMokuhyoSeiren()) {
+				// Item情報の取得
+				SeirenItemDto itemDto = seirenInputForm.getSeirenItems().get(nowLv);
+				// 乱数の生成
+				double d = Math.random();
+				// レベルの変動
+				if(d <= itemDto.getRekka3Rate()) {
+					nowLv -= 3;
+				}else if(d <= itemDto.getRekka3Rate() + itemDto.getRekka2Rate()) {
+					nowLv -= 2;
+				}else if(d <= itemDto.getRekka3Rate() + itemDto.getRekka2Rate() + itemDto.getRekka1Rate()) {
+					nowLv -= 1;
+				}else if(d <= itemDto.getRekka3Rate() + itemDto.getRekka2Rate() + itemDto.getRekka1Rate() + itemDto.getRekka0Rate()) {
+					nowLv -= 0;
+				}else {
+					nowLv += 1;
+				}
+				// マイナスの補正
+				if(nowLv < 0) {
+					nowLv = 0;
+				}
+				// 消費鉱石の追加
+				String kouseki = itemDto.getvUseKouseki();
+				// 補助アイテムの追加 
+				String hojoItem = itemDto.getvUseHojoItem();
+				// スピナの計算
+				Integer syohi = tankaMap.get(kouseki.hashCode());
+				spina += (syohi == null ? 0 : syohi);
+				syohi = tankaMap.get(hojoItem.hashCode());
+				spina += (syohi == null ? 0 : syohi);
+				
+			}
+			// スピナの登録
+			spnList.add(spina);
+		}
+		// 並び替え
+		Collections.sort(spnList);
+		
+		// 期待値の計算
+		for(Integer i : spnList) {
+			average += i;
+		}
+		average = average / doNum;
+		
+		// 分散の計算
+		for(Integer i : spnList) {
+			dispersion += (i - average) * (i - average);
+		}
+		
+		// 標準偏差の計算
+		standardDev = Math.sqrt(dispersion);
+		
+		// カスタマイズ部分の精錬表示用
+		int syokiSeiren = seirenInputForm.getSyokiSeiren();
+		int mokuhyoSeiren = seirenInputForm.getMokuhyoSeiren();
+		syokiSeirenHyoji = hyoujiSeiren[syokiSeiren];
+		mokuhyoSeirenHyoji = hyoujiSeiren[mokuhyoSeiren];
+
+		
+		// 出力用DTOの作成
+		seirenOutputForm.setDoNum(doNum);
+		seirenOutputForm.setSyokiSeirenHyoji(syokiSeirenHyoji);
+		seirenOutputForm.setMokuhyoSeirenHyoji(mokuhyoSeirenHyoji);
+		seirenOutputForm.setAverage(average);
+		seirenOutputForm.setDispersion(dispersion);
+		seirenOutputForm.setStandardDev(standardDev);
+		seirenOutputForm.setSpnList(spnList);
+		
+		return seirenOutputForm;
+	}
+
+	
+    // 鉱石レベルから標準成功率の取得
+	private int returnSeikouRate(int kousekiLv, int nowLv, String paramName
+			, int seikouAdd, int seikouAddFinal, int ticketBairitu) {
+		int seikouRate = 0;
+		
+		int seirenNanido = nowLv * 3 - kousekiLv;
+		int seikouKiso = 0;
+		if(seirenNanido <= 0) {
+			seikouKiso = 100;
+		}else if(seirenNanido <= 3) {
+			seikouKiso = 90;
+		}else if(seirenNanido <= 4) {
+			seikouKiso = 80;
+		}else if(seirenNanido <= 6) {
+			seikouKiso = 70;
+		}else if(seirenNanido <= 7) {
+			seikouKiso = 60;
+		}else if(seirenNanido <= 8) {
+			seikouKiso = 50;
+		}else if(seirenNanido <= 9) {
+			seikouKiso = 40;
+		}else if(seirenNanido <= 10) {
+			seikouKiso = 30;
+		}else if(seirenNanido <= 12) {
+			seikouKiso = 20;
+		}else if(seirenNanido <= 13) {
+			seikouKiso = 10;
+		}else if(seirenNanido <= 15) {
+			seikouKiso = 0;
+		}else if(seirenNanido <= 16) {
+			seikouKiso = -10;
+		}else if(seirenNanido <= 18) {
+			seikouKiso = -20;
+		}else if(seirenNanido <= 19) {
+			seikouKiso = -30;
+		}else if(seirenNanido <= 21) {
+			seikouKiso = -40;
+		}else if(seirenNanido <= 22) {
+			seikouKiso = -50;
+		}else if(seirenNanido <= 24) {
+			seikouKiso = -60;
+		}else if(seirenNanido <= 25) {
+			seikouKiso = -70;
+		}else if(seirenNanido <= 27) {
+			seikouKiso = -80;
+		}else if(seirenNanido <= 28) {
+			seikouKiso = -90;
+		}else if(seirenNanido <= 31) {
+			seikouKiso = -100;
+		}else if(seirenNanido <= 32) {
+			seikouKiso = -110;
+		}else {
+			seikouKiso = -110;
+		}
+		// オリハルコン、精錬A(=14)の場合は特別
+		if(nowLv == 14 && kousekiLv == 11) {
+			seikouKiso = -110;
+		}
+		int tecHosei = 0;
+		if("TEC極".equals(paramName)) {
+			tecHosei = 252;
+		}
+		// 成功率(temp)の計算
+		seikouRate = (int)Math.floor(0.00000000000009 + seikouKiso + tecHosei / 4 + 15);
+		// 成功率の計算
+		seikouRate = (int)Math.floor(0.00000000000009 + seikouRate * 0.8);
+		seikouRate = (int)Math.floor(0.00000000000009 + seikouRate* ((double)(100 + seikouAdd) / (double)100));
+		if(seikouRate > 100) {
+			seikouRate = 100;
+		}else if(seikouRate < 1) {
+			seikouRate = 1;
+		}
+		// 最終成功率の加算
+		seikouRate = (int)Math.floor(0.00000000000009 + seikouRate * ( (double)ticketBairitu / (double)100));
+		seikouRate = seikouRate + seikouAddFinal;
+		if(seikouRate > 100) {
+			seikouRate = 100;
+		}
+		return seikouRate;
+	}
+	
+
+	private void setInputData(SeirenInputForm seirenInputForm) {
+		
+		// 精錬値の設定
+		if(seirenInputForm.getSyokiSeiren() == null) {
+			seirenInputForm.setSyokiSeiren(0);
+		}
+		if(seirenInputForm.getMokuhyoSeiren() == null) {
+			seirenInputForm.setMokuhyoSeiren(15);
+		}
+		if(seirenInputForm.getSyokiSeiren() >= seirenInputForm.getMokuhyoSeiren()) {
+			seirenInputForm.setMokuhyoSeiren(seirenInputForm.getSyokiSeiren() + 1);
+		}
+		
+		// 入力情報のリフレッシュ処理
+		seirenInputForm.getTecRekka().refresh();
+		seirenInputForm.getLucRekka().refresh();
+		// アイテム情報取得
+		List<SeirenItemDto> itemDtoList = seirenInputForm.getSeirenItems();
+		
+		// アイテム情報の取得
+		for(SeirenItemDto dto : itemDtoList) {
+			// 鉱石情報の取得
+			KousekiDataDto kousekiDto = seirenDataDao.getKousekiDataDto(dto.getvUseKouseki());
+			// 補助アイテム情報の取得
+			HojoItemDataDto hojoitemDto = seirenDataDao.getHojoItemDataDto(dto.getvUseHojoItem());
+			if(hojoitemDto == null) {
+				hojoitemDto = new HojoItemDataDto();
+				hojoitemDto.setiRekkaSafeRate(0);
+				hojoitemDto.setiSeikouRate(0);
+				hojoitemDto.setiSmithSeikouRate(0);
+				hojoitemDto.setiTicketBairitu(100);
+			}
+			// 各種情報の設定
+			dto.setiKousekiLv(kousekiDto.getiKouseki());
+			dto.setRekkaSafe(hojoitemDto.getiRekkaSafeRate());
+			dto.setSeikouAdd(hojoitemDto.getiSeikouRate());
+			dto.setSeikouAddFinal(hojoitemDto.getiSmithSeikouRate());
+			dto.setTicketBairitu(hojoitemDto.getiTicketBairitu());
+			
+		}
+
+
+		for(SeirenItemDto dto : itemDtoList) {
+			// 鉱石による成功率の取得
+			int seikouRate = this.returnSeikouRate(dto.getiKousekiLv(), dto.getiNowLv(), dto.getvParamName()
+					,dto.getSeikouAdd(), dto.getSeikouAddFinal(), dto.getTicketBairitu());
+			dto.setSeikouRate((double)seikouRate / (double)100);
+		}
+		
+		for(SeirenItemDto dto : itemDtoList) {
+			double seikouRate = dto.getSeikouRate();
+			SeirenRekkaDto rekkaDto = null;
+			// 劣化DTOの設定
+			if("LUK極".equals(dto.getvParamName())) {
+				rekkaDto = seirenInputForm.getLucRekka();
+			}else {
+				rekkaDto = seirenInputForm.getTecRekka();
+			}
+			int rekkaSafe = dto.getRekkaSafe();
+			double sippai = 1 - seikouRate;
+			double rekka1 = sippai * ( (double)rekkaDto.getdRekka1() / (double)100) * ( (double)(100 - rekkaSafe) / (double)100);
+			double rekka2 = sippai * ( (double)rekkaDto.getdRekka2() / (double)100) * ( (double)(100 - rekkaSafe) / (double)100);
+			double rekka3 = sippai * ( (double)rekkaDto.getdRekka3() / (double)100) * ( (double)(100 - rekkaSafe) / (double)100);
+			double rekka0 = sippai - rekka1 - rekka2 - rekka3;
+			// 値の設定
+			dto.setRekka0Rate(rekka0);
+			dto.setRekka1Rate(rekka1);
+			dto.setRekka2Rate(rekka2);
+			dto.setRekka3Rate(rekka3);
+		}
+	}
+	
+	// 単価情報の取得
+	private void setTankaMap(SeirenInputForm seirenInputForm, Map<Integer,Integer>tankaMap) {
+		// 単価情報のMAP変換
+		for(SeirenTankaDto dto :seirenInputForm.getTankaItems()) {
+			Integer temp = dto.getiTanka();
+			if(temp == null || temp < 0) {
+				temp = 0;
+			}
+			dto.setiTanka(temp);
+			tankaMap.put(dto.getvItemName().hashCode(), temp);
+		}
+	}
+	
+	// 使用アイテムリストの設定
+	private void setItemList(List<SeirenItemDto> itemDtoList, List<String>itemList) {
+		// 鉱石の情報取得
+		for(SeirenItemDto dto : itemDtoList) {
+			if(!itemList.contains(dto.getvUseKouseki())) {
+				itemList.add(dto.getvUseKouseki());
+			}
+		}
+		// 補助アイテムの情報取得
+		for(SeirenItemDto dto : itemDtoList) {
+			if(!(itemList.contains(dto.getvUseHojoItem()) || "なし".equals(dto.getvUseHojoItem()))) {
+				itemList.add(dto.getvUseHojoItem());
+			}
+		}
+	}
+
+
+}

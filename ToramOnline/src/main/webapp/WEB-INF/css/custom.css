@@ -1,0 +1,45 @@
+@charset "UTF-8";
+
+
+.box6 {
+    padding: 0.5em 1em;
+    margin: 2em 0;
+    background: #f0f7ff;
+    border: dashed 2px #5b8bd0;/*点線*/
+}
+.box6 p {
+    margin: 0; 
+    padding: 0;
+}
+.fgr-table {
+ margin:30px auto;
+ width:auto;
+min-width:80%;
+}
+
+.fgr-table tbody {
+ border-top:solid 1px #ccc;
+ border-left:solid 1px #ccc;
+}
+
+.fgr-table tbody th,
+.fgr-table tbody td {
+ border-bottom:solid 1px #ccc;
+ border-right:solid 1px #ccc;
+ padding:8px 12px 6px;
+ font-size:14px;
+}
+
+.fgr-table tbody tbody th {
+ min-width:150px; 
+}
+
+.fgr-table tbody .topick-fgr thead {
+font-size:14px;
+}
+
+.fgr-table tbody tfoot th,
+.fgr-table tbody tfoot td {
+ font-size:12px;
+ padding:8px 0 0;
+}
